@@ -26,5 +26,9 @@
   "newWindowSamePage": true,
   "newWindowOffset": "center",
   "newWindowOffsetMarginX": 20,
-  "newWindowOffsetMarginY": 20
+  "newWindowOffsetMarginY": 20,
+  "printCitationsOnSubmit": true,
+  "showWeaponPermit": true,
+  "showFishingPermit": true,
+  "showHuntingPermit": true
 }
