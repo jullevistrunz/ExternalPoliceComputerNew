@@ -39,7 +39,10 @@ if (!mapScroll) {
   mapScroll = { x: 0, y: 0 }
 }
 
-goToPage(lastPage)
+document.addEventListener('pluginsLoaded', function () {
+  goToPage(lastPage)
+})
+
 document.querySelectorAll('.header button').forEach((btn) => {
   btn.addEventListener('click', function () {
     this.classList.remove('notification')
@@ -297,23 +300,36 @@ let calloutPageInterval
   // load active plugins
 ;(async function () {
   const plugins = await (await fetch('/data/activePlugins')).json()
+  let loadedFiles = 0
+  let totalFiles = 0
   for (const plugin of plugins) {
     const files = await (
       await fetch(`data/filesInPluginDir?name=${plugin}`)
     ).json()
 
     for (const file of files) {
+      totalFiles++
+      const el = document.createElement(
+        file.endsWith('.css') ? 'link' : 'script'
+      )
       if (file.endsWith('.css')) {
-        const el = document.createElement('link')
         el.rel = 'stylesheet'
         el.href = `/plugins/${plugin}/${file}`
         document.head.appendChild(el)
       } else if (file.endsWith('.js')) {
-        const el = document.createElement('script')
         el.src = `/plugins/${plugin}/${file}`
         document.body.appendChild(el)
       }
+      el.addEventListener('load', function () {
+        loadedFiles++
+        if (loadedFiles == totalFiles) {
+          document.dispatchEvent(new Event('pluginsLoaded'))
+        }
+      })
     }
+  }
+  if (totalFiles == 0) {
+    document.dispatchEvent(new Event('pluginsLoaded'))
   }
 })()
 
@@ -426,7 +442,7 @@ async function goToPage(name) {
   })
   document.querySelector(`.content .${name}Page`).classList.remove('hidden')
   document.querySelector(`.header .${name}`).classList.add('selected')
-  localStorage.setItem('lastPage', name)
+  if (!query.get('window')) localStorage.setItem('lastPage', name)
 
   if (!config.showCustomizationLink || name == 'map') {
     document
@@ -523,95 +539,46 @@ async function renderPedSearch() {
       tryLanguageValue(ped.gender, langValues)
     ),
     elements.informationLabel(
-      langPed.resultContainer.address,
-      `${ped.addressPostal} ${ped.addressStreet}`
-    ),
-    elements.informationLabel(
       langPed.resultContainer.licenseStatus,
       ped.licenseStatus != 'Valid' && config.warningColorsForPedCarSearch
         ? ped.licenseData
-          ? wrapInWarningColor(
-              `${tryLanguageValue(ped.licenseStatus, langValues)} ${
-                langPed.resultContainer.for
-              } ${ped.licenseData}`
-            )
-          : wrapInWarningColor(tryLanguageValue(ped.licenseStatus, langValues))
+          ? `<a style="color: var(--warning-color); pointer-events: none;">${tryLanguageValue(
+              ped.licenseStatus,
+              langValues
+            )} ${langPed.resultContainer.for} ${ped.licenseData}</a>`
+          : `<a style="color: var(--warning-color); pointer-events: none;">${tryLanguageValue(
+              ped.licenseStatus,
+              langValues
+            )}</a>`
         : tryLanguageValue(ped.licenseStatus, langValues)
     ),
     elements.informationLabel(
       langPed.resultContainer.warrant,
       ped.isWanted == 'True'
         ? config.warningColorsForPedCarSearch
-          ? wrapInWarningColor(ped.warrantText)
+          ? `<a style="color: var(--warning-color); pointer-events: none;">${ped.warrantText}</a>`
           : ped.warrantText
         : langValues.none
     ),
     elements.informationLabel(
       langPed.resultContainer.probation,
       ped.probation != 'No' && config.warningColorsForPedCarSearch
-        ? wrapInWarningColor(tryLanguageValue(ped.probation, langValues))
+        ? `<a style="color: var(--warning-color); pointer-events: none;">${tryLanguageValue(
+            ped.probation,
+            langValues
+          )}</a>`
         : tryLanguageValue(ped.probation, langValues)
     ),
     elements.informationLabel(
       langPed.resultContainer.parole,
       ped.parole != 'No' && config.warningColorsForPedCarSearch
-        ? wrapInWarningColor(tryLanguageValue(ped.parole, langValues))
+        ? `<a style="color: var(--warning-color); pointer-events: none;">${tryLanguageValue(
+            ped.parole,
+            langValues
+          )}</a>`
         : tryLanguageValue(ped.parole, langValues)
     ),
   ]
-
-  if (config.showWeaponPermit) {
-    informationLabels.push(
-      elements.informationLabel(
-        langPed.resultContainer.weaponPermit,
-        (ped.weaponPermitStatus == 'Revoked' ||
-          ped.weaponPermitStatus == 'Expired') &&
-          config.warningColorsForPedCarSearch
-          ? wrapInWarningColor(
-              `${tryLanguageValue(ped.weaponPermitStatus, langValues)}${
-                ped.weaponPermitStatus == 'Valid'
-                  ? ` (${ped.weaponPermitType})`
-                  : ''
-              }`
-            )
-          : `${tryLanguageValue(ped.weaponPermitStatus, langValues)}${
-              ped.weaponPermitStatus == 'Valid'
-                ? ` (${ped.weaponPermitType})`
-                : ''
-            }`
-      )
-    )
-  }
-
-  if (config.showFishingPermit) {
-    informationLabels.push(
-      elements.informationLabel(
-        langPed.resultContainer.fishingPermit,
-        (ped.fishingPermitStatus == 'Revoked' ||
-          ped.fishingPermitStatus == 'Expired') &&
-          config.warningColorsForPedCarSearch
-          ? wrapInWarningColor(
-              tryLanguageValue(ped.fishingPermitStatus, langValues)
-            )
-          : tryLanguageValue(ped.fishingPermitStatus, langValues)
-      )
-    )
-  }
-
-  if (config.showHuntingPermit) {
-    informationLabels.push(
-      elements.informationLabel(
-        langPed.resultContainer.huntingPermit,
-        (ped.huntingPermitStatus == 'Revoked' ||
-          ped.huntingPermitStatus == 'Expired') &&
-          config.warningColorsForPedCarSearch
-          ? wrapInWarningColor(
-              tryLanguageValue(ped.huntingPermitStatus, langValues)
-            )
-          : tryLanguageValue(ped.huntingPermitStatus, langValues)
-      )
-    )
-  }
 
   const cautions = []
   if (
@@ -633,7 +600,7 @@ async function renderPedSearch() {
   if (cautions.length) {
     for (const i in cautions) {
       cautions[i] = config.warningColorsForPedCarSearch
-        ? wrapInWarningColor(`• ${cautions[i]}`)
+        ? `<a style="color: var(--warning-color); pointer-events: none;">• ${cautions[i]}</a>`
         : `• ${cautions[i]}`
     }
     informationLabels.push(
@@ -665,10 +632,6 @@ async function renderPedSearch() {
       openArrestReport()
     })
   )
-}
-
-function wrapInWarningColor(text) {
-  return `<div style="color: var(--warning-color); display: inline">${text}</div>`
 }
 
 async function renderCarSearch() {
@@ -708,30 +671,48 @@ async function renderCarSearch() {
     elements.informationLabel(
       langCar.resultContainer.registration,
       car.registration != 'Valid' && config.warningColorsForPedCarSearch
-        ? wrapInWarningColor(tryLanguageValue(car.registration, langValues))
+        ? `<a style="color: var(--warning-color); pointer-events: none;">${tryLanguageValue(
+            car.registration,
+            langValues
+          )}</a>`
         : tryLanguageValue(car.registration, langValues)
     ),
     elements.informationLabel(
       langCar.resultContainer.insurance,
       car.insurance != 'Valid' && config.warningColorsForPedCarSearch
-        ? wrapInWarningColor(tryLanguageValue(car.insurance, langValues))
+        ? `<a style="color: var(--warning-color); pointer-events: none;">${tryLanguageValue(
+            car.insurance,
+            langValues
+          )}</a>`
         : tryLanguageValue(car.insurance, langValues)
     ),
     elements.informationLabel(
       langCar.resultContainer.stolen,
       car.stolen != 'No' && config.warningColorsForPedCarSearch
-        ? wrapInWarningColor(tryLanguageValue(car.stolen, langValues))
+        ? `<a style="color: var(--warning-color); pointer-events: none;">${tryLanguageValue(
+            car.stolen,
+            langValues
+          )}</a>`
         : tryLanguageValue(car.stolen, langValues)
     ),
-    elements.informationLabel(langCar.resultContainer.owner, car.owner, () => {
-      openPedInSearchPedPage(car.owner)
-    }),
+    elements.informationLabel(
+      langCar.resultContainer.owner,
+      car.owner,
+      () => {
+        openPedInSearchPedPage(car.owner)
+      },
+      null,
+      (e) => {
+        e.preventDefault()
+        openInNewWindow('ped', car.owner)
+      }
+    ),
   ]
 
   if (car.cautions.length) {
     for (const i in car.cautions) {
       car.cautions[i] = config.warningColorsForPedCarSearch
-        ? wrapInWarningColor(`• ${car.cautions[i]}`)
+        ? `<a style="color: var(--warning-color); pointer-events: none;">• ${car.cautions[i]}</a>`
         : `• ${car.cautions[i]}`
     }
     informationLabels.push(
@@ -927,30 +908,16 @@ function addArrest(charge) {
 }
 
 async function submitCitations() {
-  const config = await getConfig()
   const currentPed = document.querySelector(
     '.searchPedPage .resultContainer .name'
   ).innerHTML
   const citations = []
   const citationsData = []
-  for (
-    let i = 0;
-    i <
-    document.querySelectorAll('.searchPedPage .citationReport .result .btn')
-      .length;
-    i++
-  ) {
-    const el = document.querySelectorAll(
-      '.searchPedPage .citationReport .result .btn'
-    )[i]
+  for (el of document.querySelectorAll(
+    '.searchPedPage .citationReport .result .btn'
+  )) {
     citations.push(el.innerHTML)
-    citationsData.push(JSON.parse(el.dataset.charge))
-
-    citationsData[i].fine =
-      citationsData[i].minFine +
-      Math.floor(
-        Math.random() * (citationsData[i].maxFine - citationsData[i].minFine)
-      )
+    citationsData.push(el.dataset.charge)
   }
   await fetch('/post/addCitations', {
     method: 'post',
@@ -959,47 +926,12 @@ async function submitCitations() {
       citations: citations,
     }),
   })
-  if (config.printCitationsOnSubmit) {
-    await sendCitationsData(currentPed, citationsData)
-  }
   const description = document.querySelector(
     '.searchPedPage .citationReport .result .description'
   ).value
   addCitationToCourt(citationsData, currentPed, description)
   closeCitations()
   openPedInSearchPedPage(currentPed)
-}
-
-async function sendCitationsData(name, citationsData) {
-  let citations = []
-  for (let citation of citationsData) {
-    if (citations.find((x) => x.name == citation.name)) {
-      const index = citations.findIndex((x) => x.name == citation.name)
-      citations[index].count++
-      citations[
-        index
-      ].name = `${citations[index].name} - x${citations[index].count}`
-      citations[index].fine += citation.fine
-    } else {
-      citations.push({ ...citation, count: 1 })
-    }
-  }
-
-  let texts = []
-  for (const citation of citations) {
-    const obj = {
-      name: name,
-      text: citation.name,
-      fine: citation.fine,
-      isArrestable: false,
-    }
-    texts.push(new URLSearchParams(obj).toString())
-  }
-
-  await fetch('/post/giveCitations', {
-    method: 'post',
-    body: texts.join(','),
-  })
 }
 
 function closeCitations() {
@@ -1044,10 +976,10 @@ async function addCitationToCourt(charges, pedName, description) {
   const nameList = []
   let fullFine = 0
   for (let charge of charges) {
-    const fine = charge.fine
-      ? charge.fine
-      : charge.minFine +
-        Math.floor(Math.random() * (charge.maxFine - charge.minFine))
+    charge = JSON.parse(charge)
+    const fine =
+      charge.minFine +
+      Math.floor(Math.random() * (charge.maxFine - charge.minFine))
     const outcome = `${language.content.fine}: ${
       language.content.currency
     }${bigNumberToNiceString(fine)}`
@@ -1173,7 +1105,11 @@ async function renderCourt() {
         () => {
           openPedInSearchPedPage(courtCase.ped)
         },
-        ['pedName']
+        ['pedName'],
+        (e) => {
+          e.preventDefault()
+          openInNewWindow('ped', courtCase.ped)
+        }
       ),
       elements.informationLabel(
         langCourt.resultContainer.offense,
@@ -1334,14 +1270,14 @@ async function renderShiftPage() {
     const courtCases = []
     for (const courtCase of data.currentShift.courtCases) {
       courtCases.push(
-        `<a class="courtCaseValue" onclick="goToCourtCaseFromValue('${courtCase}')">${courtCase}</a>`
+        `<div class="courtCaseValue" onclick="goToCourtCaseFromValue('${courtCase}')" oncontextmenu="openInNewWindow('courtByCaseNumber', '${courtCase}');return false;">${courtCase}</div>`
       )
     }
     currentShiftEl.appendChild(
       elements.informationLabel(
         langShift.resultContainer.courtCases,
         data.currentShift.courtCases.length
-          ? courtCases.join('<br>')
+          ? courtCases.join('')
           : language.content.values.none
       )
     )
@@ -1414,15 +1350,13 @@ async function renderShiftPage() {
     const courtCases = []
     for (const courtCase of shift.courtCases) {
       courtCases.push(
-        `<a class="courtCaseValue" onclick="goToCourtCaseFromValue('${courtCase}')">${courtCase}</a>`
+        `<div class="courtCaseValue" onclick="goToCourtCaseFromValue('${courtCase}')" oncontextmenu="openInNewWindow('courtByCaseNumber', '${courtCase}');return false;">${courtCase}</div>`
       )
     }
     informationLabels.push(
       elements.informationLabel(
         langShift.resultContainer.courtCases,
-        courtCases.length
-          ? courtCases.join('<br>')
-          : language.content.values.none
+        courtCases.length ? courtCases.join('') : language.content.values.none
       )
     )
 
@@ -2043,6 +1977,12 @@ async function moveCursorBehindCurrentIncidentReportLink() {
   }
 }
 
+/**
+ * Removes all event listeners from the given element.
+ *
+ * @param {HTMLElement} element - The element from which to remove event listeners.
+ * @return {HTMLElement} - The new element with all event listeners removed.
+ */
 function removeAllEventListeners(element) {
   const clonedElement = element.cloneNode(true)
   element.replaceWith(clonedElement)
@@ -2269,14 +2209,15 @@ function hideCurrentID() {
   document.querySelector('.showCurrentID-container').classList.remove('hidden')
 }
 
-//? mainly for custom.js
-function reassignEventListener(
-  selector = '*',
-  eventType = 'click',
-  cb = function () {
-    console.warn('Empty Callback')
-  }
-) {
+/**
+ * Reassigns an event listener to a DOM element.
+ *
+ * @param {string} selector - The CSS selector of the element.
+ * @param {string} eventType - The type of event to listen for.
+ * @param {function} cb - The callback function to execute when the new event is triggered.
+ * @deprecated use API method instead
+ */
+function reassignEventListener(selector, eventType, cb) {
   const el = document.querySelector(selector)
   el.parentNode.replaceChild(el.cloneNode(true), el)
   document.querySelector(selector).addEventListener(eventType, cb)
@@ -2460,22 +2401,36 @@ async function updateCalloutPage() {
 }
 
 async function openInNewWindow(type, name) {
+  if (query.get('window')) return
   const config = await getConfig()
   const url = `/?window=true&type=${type}&name=${name}`
   const size = [config.newWindowWidth, config.newWindowHeight]
-  if (config.newWindowSamePage) {
-    const offset = [
-      window.innerWidth / 2 - size[0] / 2,
-      window.innerHeight / 2 - size[1] / 2,
+  const windowDimensions = config.newWindowSamePage
+    ? [window.innerWidth, window.innerHeight]
+    : [window.outerWidth, window.outerHeight]
+  let offset
+  if (config.newWindowOffset == 'center') {
+    offset = [
+      windowDimensions[0] / 2 - size[0] / 2,
+      windowDimensions[1] / 2 - size[1] / 2,
     ]
+  } else {
+    const top = config.newWindowOffset.split('-')[0] == 'top'
+    const left = config.newWindowOffset.split('-')[1] == 'left'
+    offset = [
+      left
+        ? config.newWindowOffsetMarginX
+        : windowDimensions[0] - size[0] - config.newWindowOffsetMarginX,
+      top
+        ? config.newWindowOffsetMarginY
+        : windowDimensions[1] - size[1] - config.newWindowOffsetMarginY,
+    ]
+  }
+  if (config.newWindowSamePage) {
     document
       .querySelector('.overlay .windows')
       .appendChild(elements.newWindow(url, size, offset))
   } else {
-    const offset = [
-      window.outerWidth / 2 - size[0] / 2,
-      window.outerHeight / 2 - size[1] / 2,
-    ]
     window.open(
       url,
       '',
